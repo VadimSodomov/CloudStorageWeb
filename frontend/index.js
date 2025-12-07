@@ -44,7 +44,10 @@ export const API = {
     getRootFolder: () => api.get('/api/folder/root'),
     createFolder: (name, parent_id) => api.post('/api/folder', {name, parent_id}),
     renameFolder: (name, id) => api.put(`api/folder/${id}`, {name}),
-    deleteFolder: (id) => api.delete(`api/folder/${id}`)
+    deleteFolder: (id) => api.delete(`api/folder/${id}`),
+
+    shareFolderByCode: (folderId) => api.post(`/api/folder/share/${folderId}`),
+    stopShareFolder: (folderId) => api.post(`/api/folder/stop/sharing/${folderId}`),
 };
 
 export default api;
