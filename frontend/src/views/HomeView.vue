@@ -48,7 +48,48 @@
             <QItemSection>Открыть</QItemSection>
           </QItem>
 
-  <!--        TODO в будущем, когда появятся еще другие папки, в которые присоединится-->
+          <QSeparator />
+
+          <QItem
+            v-if="selectedFolder && !selectedFolder.code"
+            clickable
+            v-close-popup
+            @click="shareFolderByCode"
+          >
+            <QItemSection avatar>
+              <QIcon name="share" />
+            </QItemSection>
+            <QItemSection>Поделиться папкой</QItemSection>
+          </QItem>
+
+          <QItem
+            v-if="selectedFolder && selectedFolder.code"
+            clickable
+            v-close-popup
+            @click="showShareCode()"
+          >
+            <QItemSection avatar>
+              <QIcon name="vpn_key" />
+            </QItemSection>
+            <QItemSection>Показать код доступа</QItemSection>
+          </QItem>
+
+          <QItem
+            v-if="selectedFolder && selectedFolder.code"
+            clickable
+            v-close-popup
+            @click="stopShareFolder"
+          >
+            <QItemSection avatar>
+              <QIcon name="link_off" />
+            </QItemSection>
+            <QItemSection>Перестать делиться</QItemSection>
+          </QItem>
+
+          <QSeparator />
+
+
+          <!--        TODO в будущем, когда появятся еще другие папки, в которые присоединится-->
   <!--        пользователь по коду, сделать так, чтобы удалять и переименовывать папку мог только владелец-->
 
           <QItem clickable v-close-popup @click="renameFolder">
@@ -206,6 +247,129 @@ function deleteFolder() {
       })
     }
   })
+}
+
+async function shareFolderByCode() {
+  if (!selectedFolder.value) return;
+
+  const folder = selectedFolder.value;
+
+  try {
+    loader.show("Создание кода доступа");
+    const { data } = await API.shareFolderByCode(folder.id);
+    await getData();
+    loader.hide();
+
+    const code = data?.code;
+
+    if (code) {
+      $q.dialog({
+        title: "Доступ к папке по коду",
+        message: "Передайте этот код пользователю, чтобы он мог присоединиться к папке:",
+        prompt: {
+          model: code,
+          type: "text",
+          isValid: () => true
+        },
+        ok: {
+          label: "Готово"
+        },
+        cancel: false,
+        persistent: true
+      });
+    }
+
+    $q.notify({
+      message: "Код доступа успешно сгенерирован",
+      type: "positive",
+      position: "top-right",
+      timeout: 3000
+    });
+  } catch (e) {
+    console.error("Ошибка при создании кода доступа:", e);
+    loader.hide();
+    $q.notify({
+      message: e.response?.data?.message || "Не удалось создать код доступа",
+      type: "negative",
+      position: "top-right",
+      timeout: 4000,
+      icon: "warning"
+    });
+  }
+}
+function showShareCode(codeFromApi) {
+  const folder = selectedFolder.value;
+  const code = codeFromApi ?? folder?.code;
+
+  if (!folder || !code) return;
+
+  $q.dialog({
+    title: 'Код доступа к папке',
+    message: 'Передайте этот код пользователю:',
+    prompt: {
+      model: code,
+      type: 'text',
+      isValid: () => true
+    },
+    ok: {
+      label: 'Закрыть',
+      color: 'primary'
+    },
+    cancel: {
+      label: 'Сгенерировать новый',
+      flat: true
+    },
+    persistent: true,
+  })
+    .onOk(() => {
+    })
+    .onCancel(() => {
+      shareFolderByCode();
+    })
+}
+
+function stopShareFolder() {
+  if (!selectedFolder.value) return;
+
+  const folder = selectedFolder.value;
+
+  $q.dialog({
+    title: "Отключить доступ по коду",
+    message: `Отключить доступ к папке "${folder.name}" по коду?`,
+    persistent: true,
+    ok: {
+      label: "Отключить",
+      color: "primary"
+    },
+    cancel: {
+      label: "Отмена",
+      flat: true
+    }
+  }).onOk(async () => {
+    try {
+      loader.show("Отключение доступа");
+      await API.stopShareFolder(folder.id);
+      await getData();
+      loader.hide();
+
+      $q.notify({
+        message: "Доступ по коду отключён",
+        type: "positive",
+        position: "top-right",
+        timeout: 3000
+      });
+    } catch (e) {
+      console.error("Ошибка при отключении доступа по коду:", e);
+      loader.hide();
+      $q.notify({
+        message: e.response?.data?.message || "Не удалось отключить доступ по коду",
+        type: "negative",
+        position: "top-right",
+        timeout: 4000,
+        icon: "warning"
+      });
+    }
+  });
 }
 
 async function getData() {
