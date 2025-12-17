@@ -1,7 +1,7 @@
 <template>
   <div class="page-content">
     <div class="page-head">
-      <div class="page-head_title">cloudy</div>
+      <div class="page-head_title" @click="goHome">cloudy</div>
       <div class="page-head_btns">
         <slot name="buttons"/>
         <QBtn
@@ -59,6 +59,10 @@ const handleLogout = async () => {
     }
   })
 }
+
+const goHome = () => {
+  router.push('/')
+}
 </script>
 
 <style scoped>
@@ -91,6 +95,7 @@ const handleLogout = async () => {
   text-align: center;
   letter-spacing: 3px;
   text-shadow: 0 4px 15px rgba(74, 123, 255, 0.2);
+  cursor: pointer;
 }
 
 .page-head_btns{

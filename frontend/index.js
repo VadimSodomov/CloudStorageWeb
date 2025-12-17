@@ -9,22 +9,26 @@ const api = axios.create({
 
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('jwt_token');
+    const url = config.url || '';
 
-    if (!token && !config.url.includes('/api/login') && !config.url.includes('/api/register')) {
-      window.location.href = '/login-reg';
-      return Promise.reject(new Error('No authentication token'));
+    const isAuthRequest =
+    url.includes('/api/login') || url.includes('/api/register');
+
+    if (isAuthRequest) {
+      return config;
     }
+    const token = localStorage.getItem('jwt_token');
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      return config;
     }
-    return config;
+    window.location.href = '/login-reg';
+    return Promise.reject(new Error('No authentication token'));
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
+
 
 api.interceptors.response.use(
   (response) => response,
@@ -42,9 +46,10 @@ api.interceptors.response.use(
 // тут можно методы прописывать
 export const API = {
     getRootFolder: () => api.get('/api/folder/root'),
+    getFolder: (id, code) => api.get(`/api/folder/${id}`, { params: code ? { code } : {} }),
     createFolder: (name, parent_id) => api.post('/api/folder', {name, parent_id}),
-    renameFolder: (name, id) => api.put(`api/folder/${id}`, {name}),
-    deleteFolder: (id) => api.delete(`api/folder/${id}`),
+    renameFolder: (name, id) => api.put(`/api/folder/${id}`, {name}),
+    deleteFolder: (id) => api.delete(`/api/folder/${id}`),
 
     shareFolderByCode: (folderId) => api.post(`/api/folder/share/${folderId}`),
     stopShareFolder: (folderId) => api.post(`/api/folder/stop/sharing/${folderId}`),

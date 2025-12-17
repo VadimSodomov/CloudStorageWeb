@@ -1,23 +1,27 @@
 <template>
   <PageLayout>
     <template #buttons>
-      <QBtn label="Загрузить" rounded color="amber" icon="cloud_upload"/>
-      <QBtn label="Создать папку" rounded color="primary" icon="create_new_folder" @click="createFolder"/>
+      <QBtn v-if="!isReadOnly" label="Загрузить" rounded color="amber" icon="cloud_upload"/>
+      <QBtn v-if="!isReadOnly" label="Создать папку" rounded color="primary" icon="create_new_folder" @click="createFolder"/>
     </template>
-
     <template #content>
-      <QBreadcrumbs class="q-mb-md breadcrumbs" v-if="folderData">
-        <QBreadcrumbsEl
-          :label="folderData?.root?.name"
-          icon="folder"
-        />
-      </QBreadcrumbs>
+  <QBreadcrumbs v-if="breadcrumbs?.length" class="q-mb-md breadcrumbs">
+    <QBreadcrumbsEl
+      v-for="(item, index) in breadcrumbs"
+      :key="item.id"
+      :label="item.name"
+      icon="folder"
+      :clickable="index !== breadcrumbs.length - 1"
+      @click="index !== breadcrumbs.length - 1 && goToFolder(item)"
+    />
+  </QBreadcrumbs>
 
-      <div v-if="folderData?.content?.length" class="section">
+
+      <div v-if="childFolders?.length" class="section">
         <div class="text-h6 q-mb-md">Папки</div>
         <div class="folders-grid">
           <Folder
-            v-for="folder in folderData.content"
+            v-for="folder in childFolders"
             :key="folder.id"
             :folder="folder"
             @click="openFolder(folder)"
@@ -27,9 +31,10 @@
       </div>
 
       <div
-        v-if="!folderData?.root?.files?.length && !folderData?.content?.length"
+        v-if="!folderData?.files?.length && !childFolders?.length"
         class="empty-state flex flex-center"
       >
+
         <div class="text-center">
           <div class="text-h6 text-grey-8">Пусто</div>
         </div>
@@ -51,7 +56,7 @@
           <QSeparator />
 
           <QItem
-            v-if="selectedFolder && !selectedFolder.code"
+            v-if="selectedFolder && !selectedFolder.code && !isReadOnly"
             clickable
             v-close-popup
             @click="shareFolderByCode"
@@ -71,7 +76,7 @@
             <QItemSection avatar>
               <QIcon name="vpn_key" />
             </QItemSection>
-            <QItemSection>Показать код доступа</QItemSection>
+            <QItemSection v-if="!isReadOnly">Показать ссылку доступа</QItemSection>
           </QItem>
 
           <QItem
@@ -83,7 +88,7 @@
             <QItemSection avatar>
               <QIcon name="link_off" />
             </QItemSection>
-            <QItemSection>Перестать делиться</QItemSection>
+            <QItemSection v-if="!isReadOnly">Перестать делиться</QItemSection>
           </QItem>
 
           <QSeparator />
@@ -92,7 +97,7 @@
           <!--        TODO в будущем, когда появятся еще другие папки, в которые присоединится-->
   <!--        пользователь по коду, сделать так, чтобы удалять и переименовывать папку мог только владелец-->
 
-          <QItem clickable v-close-popup @click="renameFolder">
+          <QItem v-if="!isReadOnly" clickable v-close-popup @click="renameFolder">
             <QItemSection avatar>
               <QIcon name="edit" />
             </QItemSection>
@@ -101,7 +106,7 @@
 
           <QSeparator />
 
-          <QItem clickable v-close-popup @click="deleteFolder" class="text-negative">
+          <QItem v-if="!isReadOnly" clickable v-close-popup @click="deleteFolder" class="text-negative">
             <QItemSection avatar>
               <QIcon name="delete" color="negative" />
             </QItemSection>
@@ -114,19 +119,35 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, watch, computed } from "vue";
 import { API } from '../../index.js'
 import { useQuasar } from "quasar";
 import PageLayout from "@/layouts/PageLayout.vue";
 import { useLoader } from '@/plugins/loader'
 import Folder from "@/components/Folder.vue";
+import { useRoute, useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/authStore'
 
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
+
+const childFolders = ref([])
 const folderData = ref(null);
+const accessPath = ref([]);
 const $q = useQuasar();
 
 const loader = useLoader()
 const showMenu = ref(false)
 const selectedFolder = ref(null)
+
+const isReadOnly = computed(() => !!route.query.code)
+
+const breadcrumbs = computed(() => {
+  if (accessPath.value?.length) return accessPath.value
+  if (folderData.value) return [{ id: folderData.value.id, name: folderData.value.name }]
+  return []
+})
 
 const createFolder = () => {
   $q.dialog({
@@ -142,7 +163,7 @@ const createFolder = () => {
   }).onOk(async (folderName) => {
     try {
       loader.show('Создание папки')
-      await API.createFolder(folderName, folderData.value?.root?.id)
+      await API.createFolder(folderName, folderData.value?.id)
       loader.hide()
       await getData()
 
@@ -170,6 +191,27 @@ const createFolder = () => {
 function showContextMenu(folder, event) {
   selectedFolder.value = folder
   showMenu.value = true
+}
+
+function openFolder(folder) {
+  router.push({
+    name: 'Folder',
+    params: { id: folder.id },
+    query: authStore.accessCode ? { code: authStore.accessCode } : {},
+  })
+}
+
+function goToFolder(item) {
+  router.push({
+    name: 'Folder',
+    params: { id: item.id },
+    query: authStore.accessCode ? { code: authStore.accessCode } : {},
+  })
+}
+
+function openSelectedFolder() {
+  if (!selectedFolder.value) return
+  openFolder(selectedFolder.value)
 }
 
 function renameFolder() {
@@ -263,11 +305,13 @@ async function shareFolderByCode() {
     const code = data?.code;
 
     if (code) {
+      const shareLink = `${window.location.origin}/folder/${folder.id}?code=${code}`;
+      
       $q.dialog({
-        title: "Доступ к папке по коду",
-        message: "Передайте этот код пользователю, чтобы он мог присоединиться к папке:",
+        title: "Доступ к папке по ссылке",
+        message: "Передайте эту ссылку пользователю, чтобы он мог присоединиться к папке:",
         prompt: {
-          model: code,
+          model: shareLink,
           type: "text",
           isValid: () => true
         },
@@ -303,11 +347,13 @@ function showShareCode(codeFromApi) {
 
   if (!folder || !code) return;
 
+  const shareLink = `${window.location.origin}/folder/${folder.id}?code=${code}`;
+
   $q.dialog({
-    title: 'Код доступа к папке',
-    message: 'Передайте этот код пользователю:',
+    title: 'Ссылка доступа к папке',
+    message: 'Передайте эту ссылку пользователю:',
     prompt: {
-      model: code,
+      model: shareLink,
       type: 'text',
       isValid: () => true
     },
@@ -316,7 +362,7 @@ function showShareCode(codeFromApi) {
       color: 'primary'
     },
     cancel: {
-      label: 'Сгенерировать новый',
+      label: 'Сгенерировать новую',
       flat: true
     },
     persistent: true,
@@ -374,9 +420,29 @@ function stopShareFolder() {
 
 async function getData() {
   try {
-    loader.show('Загрузка файлов...')
-    const { data } = await API.getRootFolder();
-    folderData.value = data;
+    loader.show('Загрузка папки...')
+
+    const folderId = route.params.id
+    const codeFromUrl = route.query.code
+
+    if (codeFromUrl) {
+      authStore.setAccessCode(codeFromUrl)
+    } else {
+      authStore.clearAccessCode()
+    }
+
+  if (folderId) {
+    const response = await API.getFolder(folderId, authStore.accessCode)
+    folderData.value = response.data.folder
+    childFolders.value = response.data.childFolders || []
+    accessPath.value = response.data.accessPath || []
+  } else {
+    const response = await API.getRootFolder()
+    folderData.value = response.data.root
+    childFolders.value = response.data.content || []
+    accessPath.value = []
+  }
+
   } catch (e) {
     $q.notify({
       message: e.response?.data?.message || 'Ошибка загрузки',
@@ -394,6 +460,12 @@ async function getData() {
 onMounted(async () => {
   await getData()
 });
+watch(
+  () => route.params.id,
+  () => {
+    getData()
+  }
+)
 </script>
 
 <style scoped>

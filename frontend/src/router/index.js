@@ -23,6 +23,16 @@ const router = createRouter({
             guestOnly: true,
         },
     },
+    {
+        path: '/folder/:id',
+        name: 'Folder',
+        component: HomeView,
+        meta: {
+            title: 'Папка',
+            requiresAuth: false,
+        },
+    },
+
   ],
 })
 
