@@ -53,6 +53,9 @@ export const API = {
 
     shareFolderByCode: (folderId) => api.post(`/api/folder/share/${folderId}`),
     stopShareFolder: (folderId) => api.post(`/api/folder/stop/sharing/${folderId}`),
+
+    uploadFiles: (folderId, formData) => api.post(`/api/files/upload/${folderId}`, formData, {headers: { 'Content-Type': 'multipart/form-data' },}),
+    deleteFiles: (fileIds) => api.delete('/api/files/delete', { data: { file_ids: fileIds } }),
 };
 
 export default api;

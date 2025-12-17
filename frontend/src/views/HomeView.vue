@@ -1,7 +1,16 @@
 <template>
   <PageLayout>
     <template #buttons>
-      <QBtn v-if="!isReadOnly" label="Загрузить" rounded color="amber" icon="cloud_upload"/>
+      <QBtn
+        v-if="!isReadOnly && selectedCount > 0"
+        :label="`Удалить (${selectedCount})`"
+        rounded
+        color="negative"
+        icon="delete"
+        @click="deleteSelectedFiles"
+      />
+      <QBtn v-if="!isReadOnly" label="Загрузить" rounded color="amber" icon="cloud_upload" @click="pickFiles"/>
+      <input ref="fileInput" type="file" multiple style="display:none" @change="onFilesSelected"/>
       <QBtn v-if="!isReadOnly" label="Создать папку" rounded color="primary" icon="create_new_folder" @click="createFolder"/>
     </template>
     <template #content>
@@ -29,6 +38,22 @@
           />
         </div>
       </div>
+      
+      <div v-if="folderData?.files?.length" class="section">
+        <div class="text-h6 q-mb-md">Файлы</div>
+        <div class="folders-grid">
+          <FileCard
+            v-for="f in folderData.files"
+            :key="f.id"
+            :file="f"
+            :readonly="isReadOnly"
+            :selected="selectedFileIds.has(f.id)"
+            @toggle-select="toggleFileSelect"
+            @delete="deleteOneFile"
+          />
+        </div>
+      </div>
+
 
       <div
         v-if="!folderData?.files?.length && !childFolders?.length"
@@ -125,6 +150,7 @@ import { useQuasar } from "quasar";
 import PageLayout from "@/layouts/PageLayout.vue";
 import { useLoader } from '@/plugins/loader'
 import Folder from "@/components/Folder.vue";
+import FileCard from "@/components/FileCard.vue";
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -140,8 +166,12 @@ const $q = useQuasar();
 const loader = useLoader()
 const showMenu = ref(false)
 const selectedFolder = ref(null)
+const selectedFileIds = ref(new Set())
 
 const isReadOnly = computed(() => !!route.query.code)
+const selectedCount = computed(() => selectedFileIds.value.size)
+
+const fileInput = ref(null)
 
 const breadcrumbs = computed(() => {
   if (accessPath.value?.length) return accessPath.value
@@ -456,6 +486,114 @@ async function getData() {
     loader.hide()
   }
 }
+
+function pickFiles() {
+  fileInput.value?.click()
+}
+
+async function onFilesSelected(e) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = ''
+
+  if (!files.length) return
+
+  try {
+    loader.show('Загрузка файлов...')
+
+    const form = new FormData()
+    files.forEach(f => form.append('files', f))
+
+    const folderId = route.params.id || folderData.value?.id
+    await API.uploadFiles(folderId, form)
+
+    await getData()
+
+    $q.notify({ message: 'Файлы загружены', type: 'positive', position: 'top-right' })
+  } catch (err) {
+    console.error(err)
+    $q.notify({
+      message: err.response?.data?.message || 'Ошибка загрузки файлов',
+      type: 'negative',
+      position: 'top-right',
+    })
+  } finally {
+    loader.hide()
+  }
+}
+
+async function deleteOneFile(fileId) {
+  try {
+    const ok = await new Promise((resolve) => {
+      $q.dialog({
+        title: 'Удалить файл',
+        message: 'Удалить выбранный файл?',
+        cancel: true,
+        persistent: true,
+      }).onOk(() => resolve(true)).onCancel(() => resolve(false))
+    })
+    if (!ok) return
+
+    loader.show('Удаление файла...')
+    await API.deleteFiles([fileId])
+    await getData()
+
+    $q.notify({ message: 'Файл удалён', type: 'positive', position: 'top-right' })
+  } catch (err) {
+    console.error(err)
+    $q.notify({
+      message: err.response?.data?.message || 'Ошибка удаления файла',
+      type: 'negative',
+      position: 'top-right',
+    })
+  } finally {
+    loader.hide()
+  }
+}
+
+function toggleFileSelect(fileId) {
+  const s = new Set(selectedFileIds.value)
+  if (s.has(fileId)) s.delete(fileId)
+  else s.add(fileId)
+  selectedFileIds.value = s
+}
+
+function clearSelectedFiles() {
+  selectedFileIds.value = new Set()
+}
+
+async function deleteSelectedFiles() {
+  const ids = Array.from(selectedFileIds.value)
+  if (!ids.length) return
+
+  try {
+    const ok = await new Promise((resolve) => {
+      $q.dialog({
+        title: 'Удалить файлы',
+        message: `Удалить выбранные файлы: ${ids.length} шт.?`,
+        cancel: true,
+        persistent: true,
+      }).onOk(() => resolve(true)).onCancel(() => resolve(false))
+    })
+    if (!ok) return
+
+    loader.show('Удаление файлов...')
+    await API.deleteFiles(ids)
+    clearSelectedFiles()
+    await getData()
+
+    $q.notify({ message: 'Файлы удалены', type: 'positive', position: 'top-right' })
+  } catch (err) {
+    console.error(err)
+    $q.notify({
+      message: err.response?.data?.message || 'Ошибка удаления файлов',
+      type: 'negative',
+      position: 'top-right',
+    })
+  } finally {
+    loader.hide()
+  }
+}
+
 
 onMounted(async () => {
   await getData()

@@ -29,7 +29,7 @@ const router = createRouter({
         component: HomeView,
         meta: {
             title: 'Папка',
-            requiresAuth: false,
+            requiresAuth: true,
         },
     },
 
