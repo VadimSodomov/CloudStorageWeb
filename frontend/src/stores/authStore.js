@@ -6,11 +6,13 @@ import api from '../../index.js';
 export const useAuthStore = defineStore('authentication', () => {
     const user = ref(null);
     const token = ref(null);
+    const accessCode = ref(null);
 
     const isAuthenticated = computed(() => !!user.value && !!token.value);
 
     const getDataFromStorage = () => {
         token.value = localStorage.getItem('jwt_token');
+        accessCode.value = localStorage.getItem('access_code');
         try {
             user.value = JSON.parse(localStorage.getItem('auth_user') || 'null');
         } catch {
@@ -22,6 +24,10 @@ export const useAuthStore = defineStore('authentication', () => {
         token.value = jwt;
         user.value = userData;
 
+        accessCode.value = null;
+        localStorage.removeItem('access_code');
+
+
         localStorage.setItem('jwt_token', jwt);
         localStorage.setItem('auth_user', JSON.stringify(userData));
     };
@@ -29,9 +35,11 @@ export const useAuthStore = defineStore('authentication', () => {
     const clearSession = () => {
         token.value = null;
         user.value = null;
+        accessCode.value = null;
 
         localStorage.removeItem('jwt_token');
         localStorage.removeItem('auth_user');
+        localStorage.removeItem('access_code');
     };
 
     const getAxiosMessage = (err) =>
@@ -60,15 +68,32 @@ export const useAuthStore = defineStore('authentication', () => {
         }
     };
 
+    const setAccessCode = (code) => {
+        accessCode.value = code || null;
+        if (accessCode.value) localStorage.setItem('access_code', accessCode.value);
+        else localStorage.removeItem('access_code');
+    };
+
+    const clearAccessCode = () => {
+        accessCode.value = null;
+        localStorage.removeItem('access_code');
+    };
+
+
+
+
     return {
         user,
         token,
         isAuthenticated,
+        accessCode,
 
         getDataFromStorage,
         setSession,
         clearSession,
         login,
         register,
+        setAccessCode,
+        clearAccessCode,
     };
 });
